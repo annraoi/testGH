@@ -1,0 +1,37 @@
+name: "Validate and Check JSON files for Secrets"
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  validate_and_check_secrets:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install jq
+        run: sudo apt-get install jq
+
+      - name: Validate JSON files and check for secrets
+        run: |
+          SECRET_PATTERN='(secret|password|apikey|token)'
+          find . -type f -name "*.json" | while read -r file; do
+            echo "Validating $file"
+            jq empty "$file"
+            if [ $? -ne 0 ]; then
+              echo "::error::Invalid JSON file: $file"
+              exit 1
+            fi
+
+            echo "Checking $file for secrets"
+            jq -r 'to_entries[] | "\(.key) \(.value)"' "$file" | grep -iP "$SECRET_PATTERN"
+            if [ $? -eq 0 ]; then
+              echo "::error::Potential secret key found in $file"
+              exit 1
+            fi
+          done
